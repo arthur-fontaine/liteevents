@@ -33,8 +33,12 @@ func main() {
 	http.Handle("/api/events", handleEvents(&auth, db, hub))
 	http.Handle("/login", handleAuth())
 
-	log.Println("Server starting on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	port := os.Getenv("LITEEVENTS_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Println("Server starting on port", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 func initDB(db *sql.DB) error {
