@@ -16,6 +16,10 @@ func main() {
 	}
 	defer db.Close()
 
+	auth := Auth{
+		Passphrase: os.Getenv("LITEEVENTS_PASSPHRASE"),
+	}
+
 	// Initialize schema
 	if err := initDB(db); err != nil {
 		log.Fatal(err)
@@ -24,10 +28,10 @@ func main() {
 	hub := NewHub()
 	go hub.Run()
 
-	http.Handle("/", handleIndex(db))
-	http.Handle("/ws", handleWS(hub))
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
-	http.Handle("/api/events", handleEvents(db, hub))
+	http.Handle("/", handleIndex(&auth))
+	http.Handle("/ws", handleWS(&auth, hub))
+	http.Handle("/api/events", handleEvents(&auth, db, hub))
+	http.Handle("/login", handleAuth())
 
 	log.Println("Server starting on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))

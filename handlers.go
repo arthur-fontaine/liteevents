@@ -20,15 +20,26 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func handleIndex(db *sql.DB) http.HandlerFunc {
+func handleIndex(auth *Auth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !auth.Check(r) {
+			component := views.Auth()
+			component.Render(r.Context(), w)
+			return
+		}
+
 		component := views.Dashboard()
 		component.Render(r.Context(), w)
 	}
 }
 
-func handleWS(hub *Hub) http.HandlerFunc {
+func handleWS(auth *Auth, hub *Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !auth.Check(r) {
+			http.Error(w, "Bad auth", http.StatusForbidden)
+			return
+		}
+
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -54,8 +65,13 @@ func broadcastEvent(hub *Hub, event Event) error {
 	return nil
 }
 
-func handleEvents(db *sql.DB, hub *Hub) http.HandlerFunc {
+func handleEvents(auth *Auth, db *sql.DB, hub *Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !auth.Check(r) {
+			http.Error(w, "Bad auth", http.StatusForbidden)
+			return
+		}
+
 		if r.Method == http.MethodGet {
 			page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 			namespace := r.URL.Query().Get("namespace")
@@ -139,4 +155,25 @@ func insertEvent(db *sql.DB, event Event) error {
 		RETURNING id`
 
 	return db.QueryRow(query, event.Namespace, event.Type, event.Data, event.CreatedAt).Scan(&event.ID)
+}
+
+func handleAuth() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			passphrase := r.FormValue("passphrase")
+			if passphrase == "" {
+				http.Error(w, "Passphrase required", http.StatusBadRequest)
+				return
+			}
+
+			http.SetCookie(w, &http.Cookie{
+				Name:    "passphrase",
+				Value:   passphrase,
+				Expires: time.Now().Add(24 * time.Hour),
+			})
+
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+	}
 }
