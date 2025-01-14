@@ -1,0 +1,19 @@
+package views
+
+templ Layout() {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<title>Event Dashboard</title>
+			<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+			<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+			<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.x.x/dist/tailwind.min.css" rel="stylesheet"/>
+		</head>
+		<body class="bg-gray-100">
+			<div class="container mx-auto px-4 py-8">
+				{ children... }
+			</div>
+		</body>
+	</html>
+}

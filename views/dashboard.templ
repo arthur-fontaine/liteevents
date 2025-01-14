@@ -1,0 +1,146 @@
+package views
+
+templ Dashboard() {
+    @Layout() {
+        <div x-data="dashboard()" class="space-y-8">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">Namespace Filter</label>
+                    <select x-model="currentNamespace" @change="changeNamespace()" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                        <option value="">All Namespaces</option>
+                        <template x-for="ns in namespaces">
+                            <option :value="ns" x-text="ns"></option>
+                        </template>
+                    </select>
+                </div>
+                <canvas id="eventChart"></canvas>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-bold mb-4">Recent Events</h2>
+                <div class="space-y-4">
+                    <template x-for="event in events">
+                        <div class="border-b py-2">
+                            <div class="flex justify-between">
+                                <div>
+                                    <span x-text="event.type" class="font-semibold"></span>
+                                    <span class="text-sm text-gray-500" x-text="'[' + event.namespace + ']'"></span>
+                                </div>
+                                <div x-text="new Date(event.created_at).toLocaleString()" class="text-sm text-gray-600"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <button 
+                    @click="loadMore" 
+                    x-show="hasMore"
+                    class="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                    Load More
+                </button>
+            </div>
+        </div>
+
+        <script>
+            function dashboard() {
+                return {
+                    events: [],
+                    hasMore: true,
+                    page: 1,
+                    chart: null,
+                    socket: null,
+                    namespaces: new Set(),
+                    currentNamespace: "",
+                    eventCounts: {},
+
+                    init() {
+                        this.initWebSocket()
+                        this.initChart()
+                        this.loadEvents()
+                    },
+
+                    initWebSocket() {
+                        this.socket = new WebSocket(`ws://${window.location.host}/ws`)
+                        this.socket.onmessage = (event) => {
+                            const newEvent = JSON.parse(event.data)
+                            this.events.unshift(newEvent)
+                            this.updateChart(newEvent)
+                        }
+                    },
+
+                    initChart() {
+                        const ctx = document.getElementById('eventChart')
+                        this.chart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: [],
+                                datasets: [{
+                                    label: 'Events per minute',
+                                    data: []
+                                }]
+                            },
+                            options: {
+                                scales: {
+                                    y: { beginAtZero: true }
+                                }
+                            }
+                        })
+                    },
+
+                    loadEvents() {
+                        fetch(`/api/events?page=${this.page}&namespace=${this.currentNamespace}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                this.events.push(...data.events)
+                                this.hasMore = data.has_more
+                                data.events.forEach(event => {
+                                    this.namespaces.add(event.namespace)
+                                })
+                                this.page++
+                            })
+                    },
+
+                    loadMore() {
+                        this.loadEvents()
+                    },
+
+                    changeNamespace() {
+                        this.events = []
+                        this.page = 1
+                        this.loadEvents()
+                    },
+
+                    updateChart(event) {
+                        const now = new Date();
+                        const minute = new Date(now.setSeconds(0, 0)).getTime();
+                        
+                        // Initialize if not exists
+                        if (!this.eventCounts[minute]) {
+                            this.eventCounts[minute] = 0;
+                        }
+                        
+                        this.eventCounts[minute]++;
+                        
+                        // Keep only last 30 minutes
+                        const thirtyMinutesAgo = minute - (30 * 60 * 1000);
+                        Object.keys(this.eventCounts).forEach(key => {
+                            if (parseInt(key) < thirtyMinutesAgo) {
+                                delete this.eventCounts[key];
+                            }
+                        });
+                        
+                        // Update chart
+                        const sortedTimes = Object.keys(this.eventCounts).sort();
+                        this.chart.data.labels = sortedTimes.map(t => 
+                            new Date(parseInt(t)).toLocaleTimeString()
+                        );
+                        this.chart.data.datasets[0].data = sortedTimes.map(t => 
+                            this.eventCounts[t]
+                        );
+                        
+                        this.chart.update();
+                    }
+                }
+            }
+        </script>
+    }
+}
